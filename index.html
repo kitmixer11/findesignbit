@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Учет финансов</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
@@ -47,6 +48,35 @@
             color: var(--text-primary);
             line-height: 1.6;
             transition: background-color 0.3s, color 0.3s;
+            /* Telegram safe areas */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* Loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.3s;
+        }
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .loading-spinner {
+            width: 40px; height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         .container { max-width: 1280px; margin: 0 auto; padding: 1.5rem 2rem; }
@@ -439,6 +469,11 @@
     </style>
 </head>
 <body>
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+</div>
+
 <div class="container">
 
     <!-- Header -->
@@ -603,17 +638,68 @@
 </div>
 
 <script>
+    // ── Telegram Web App Init ──
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+    
     // ── State ──
-    let projects = JSON.parse(localStorage.getItem('financeProjects2')) || [];
+    let projects = [];
     let currentProjectId = null;
     let editingTaskId = null;
     let editingProjectId = null;
+    let isLoading = true;
+
+    // ── Cloud Storage helpers ──
+    function cloudGet(key) {
+        return new Promise((resolve) => {
+            tg.CloudStorage.getItem(key, (err, value) => {
+                if (err || !value) resolve(null);
+                else resolve(value);
+            });
+        });
+    }
+
+    function cloudSet(key, value) {
+        return new Promise((resolve) => {
+            tg.CloudStorage.setItem(key, value, (err, success) => {
+                resolve(success);
+            });
+        });
+    }
+
+    // ── Load data from Cloud Storage ──
+    async function loadData() {
+        try {
+            const data = await cloudGet('financeProjects2');
+            if (data) {
+                projects = JSON.parse(data);
+            }
+            const theme = await cloudGet('theme');
+            if (theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+            } else {
+                // Используем тему Telegram по умолчанию
+                const tgTheme = tg.colorScheme || 'dark';
+                document.documentElement.setAttribute('data-theme', tgTheme);
+            }
+        } catch (e) {
+            console.error('Error loading data:', e);
+        }
+        isLoading = false;
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        updateThemeIcon();
+        renderProjects();
+        updateStats();
+    }
+
+    // ── Save projects to Cloud Storage ──
+    async function saveProjects() {
+        await cloudSet('financeProjects2', JSON.stringify(projects));
+    }
 
     // ── Theme ──
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    updateThemeIcon();
-
+    // Тема загружается в loadData()
     function updateThemeIcon() {
         const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
         document.getElementById('themeToggle').innerHTML = isDark
@@ -621,11 +707,11 @@
             : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     }
 
-    document.getElementById('themeToggle').addEventListener('click', function() {
+    document.getElementById('themeToggle').addEventListener('click', async function() {
         const cur = document.documentElement.getAttribute('data-theme');
         const next = cur === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
+        await cloudSet('theme', next);
         updateThemeIcon();
         renderChart();
     });
@@ -751,7 +837,7 @@
         return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(s));
     }
 
-    function saveProjects() { localStorage.setItem('financeProjects2', JSON.stringify(projects)); }
+    // saveProjects уже определена выше как async функция
 
     // ── Render: project cards ──
     function renderProjects() {
@@ -962,8 +1048,8 @@
     }
 
     // ── Init ──
-    renderProjects();
-    updateStats();
+    loadData();
 </script>
 </body>
 </html>
+
