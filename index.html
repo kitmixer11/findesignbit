@@ -462,9 +462,150 @@
             .modal-content { padding: 1.25rem; width: 95%; }
             .stat-value { font-size: 1.25rem; }
             .project-header-stats { display: none; }
+            
+            /* Скрываем таблицу на мобилке */
+            .tasks-table { display: none; }
+            
+            /* Показываем карточки */
+            .tasks-mobile { display: block; }
         }
         @media (max-width: 480px) {
             .stats-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 1.1rem; }
+            .btn { padding: 0.5rem 1rem; font-size: 0.8rem; }
+        }
+
+        /* ── Mobile task cards (скрыты по умолчанию) ── */
+        .tasks-mobile {
+            display: none;
+        }
+        
+        .task-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            position: relative;
+        }
+        .task-card.paid {
+            opacity: 0.6;
+        }
+        .task-card.paid .task-card-name {
+            text-decoration: line-through;
+        }
+        
+        .task-card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .task-card-checkbox {
+            width: 24px; height: 24px;
+            border-radius: 6px;
+            border: 2px solid var(--text-muted);
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .task-card-checkbox.paid {
+            background: var(--success);
+            border-color: var(--success);
+        }
+        
+        .task-card-main {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .task-card-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+            word-break: break-word;
+        }
+        
+        .task-card-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            word-break: break-word;
+        }
+        
+        .task-card-amount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        
+        .task-card-actions {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .task-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        .task-card-date {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        
+        .task-card-paid-date {
+            color: var(--success);
+        }
+        
+        /* Mobile stats under project header */
+        .project-stats-mobile {
+            display: none;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .project-stats-mobile .stat-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.75rem;
+            text-align: center;
+        }
+        .project-stats-mobile .stat-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-bottom: 0.25rem;
+        }
+        .project-stats-mobile .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .project-stats-mobile .stat-value.total { color: var(--text-primary); }
+        .project-stats-mobile .stat-value.net { color: var(--success); }
+        .project-stats-mobile .stat-value.tax { color: var(--text-muted); }
+        
+        @media (max-width: 768px) {
+            .project-stats-mobile { display: grid; }
         }
     </style>
 </head>
@@ -559,6 +700,23 @@
             
         </div>
 
+        <!-- Mobile stats -->
+        <div class="project-stats-mobile" id="projectStatsMobile">
+            <div class="stat-item">
+                <div class="stat-label">Итого</div>
+                <div class="stat-value total" id="projectViewTotalMobile"></div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">К получению</div>
+                <div class="stat-value net" id="projectViewNetMobile"></div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Налог 6%</div>
+                <div class="stat-value tax" id="projectViewTaxMobile"></div>
+            </div>
+        </div>
+
+        <!-- Desktop table -->
         <div class="tasks-table">
             <table>
                 <thead>
@@ -577,6 +735,9 @@
                 </tbody>
             </table>
         </div>
+        
+        <!-- Mobile cards -->
+        <div class="tasks-mobile" id="tasksMobileContainer"></div>
     </div>
 
 </div><!-- /container -->
@@ -955,14 +1116,28 @@
         for (const t of proj.tasks) total += t.amount;
         const tax = total * 0.06, net = total - tax;
 
+        // Desktop stats
         document.getElementById('projectViewTitle').textContent = proj.name;
         document.getElementById('projectViewTotal').textContent = fmt(total) + ' ₽';
         document.getElementById('projectViewNet').textContent   = fmt(net)   + ' ₽';
         document.getElementById('projectViewTax').textContent   = fmt(tax)   + ' ₽';
+        
+        // Mobile stats
+        const mobileTotal = document.getElementById('projectViewTotalMobile');
+        const mobileNet = document.getElementById('projectViewNetMobile');
+        const mobileTax = document.getElementById('projectViewTaxMobile');
+        if (mobileTotal) mobileTotal.textContent = fmt(total) + ' ₽';
+        if (mobileNet) mobileNet.textContent = fmt(net) + ' ₽';
+        if (mobileTax) mobileTax.textContent = fmt(tax) + ' ₽';
 
         const tbody = document.getElementById('tasksTableBody');
+        const mobileContainer = document.getElementById('tasksMobileContainer');
+        
         if (proj.tasks.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Нет задач<br><button class="btn btn-primary btn-small" style="margin-top:1rem;" onclick="openTaskModal()">Добавить первую задачу</button></td></tr>';
+            if (mobileContainer) {
+                mobileContainer.innerHTML = '<div class="empty-state" style="text-align:center;padding:2rem;">Нет задач<br><button class="btn btn-primary btn-small" style="margin-top:1rem;" onclick="openTaskModal()">Добавить первую задачу</button></div>';
+            }
             return;
         }
 
@@ -970,6 +1145,7 @@
         const EDIT_ICO  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
         const DEL_ICO   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
+        // Desktop table
         let html = '';
         for (const task of proj.tasks) {
             const pc = task.paid ? 'paid' : '';
@@ -989,6 +1165,39 @@
             html += `</div></td></tr>`;
         }
         tbody.innerHTML = html;
+        
+        // Mobile cards
+        if (mobileContainer) {
+            let mobileHtml = '';
+            for (const task of proj.tasks) {
+                const pc = task.paid ? 'paid' : '';
+                mobileHtml += `<div class="task-card ${pc}">`;
+                mobileHtml += `<div class="task-card-header">`;
+                mobileHtml += `<div class="task-card-checkbox ${pc}" onclick="toggleTaskPaid(${task.id})">${task.paid ? CHECK_ICO : ''}</div>`;
+                mobileHtml += `<div class="task-card-main">`;
+                mobileHtml += `<div class="task-card-name">${task.name}</div>`;
+                if (task.description) {
+                    mobileHtml += `<div class="task-card-desc">${task.description}</div>`;
+                }
+                mobileHtml += `<div class="task-card-amount">${fmt(task.amount)} ₽</div>`;
+                mobileHtml += `</div>`;
+                mobileHtml += `</div>`;
+                mobileHtml += `<div class="task-card-actions">`;
+                mobileHtml += `<button class="icon-btn" onclick="openTaskModal(${task.id})" title="Редактировать">${EDIT_ICO}</button>`;
+                mobileHtml += `<button class="icon-btn" onclick="deleteTask(${task.id})" title="Удалить">${DEL_ICO}</button>`;
+                mobileHtml += `</div>`;
+                mobileHtml += `<div class="task-card-footer">`;
+                mobileHtml += `<div class="task-card-date">`;
+                mobileHtml += `<span>Создано: ${fmtDate(task.date)}</span>`;
+                if (task.paidDate) {
+                    mobileHtml += `<span class="task-card-paid-date">Оплачено: ${fmtDate(task.paidDate)}</span>`;
+                }
+                mobileHtml += `</div>`;
+                mobileHtml += `</div>`;
+                mobileHtml += `</div>`;
+            }
+            mobileContainer.innerHTML = mobileHtml;
+        }
     }
 
     // ── Stats & Chart ──
