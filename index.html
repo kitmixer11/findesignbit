@@ -724,29 +724,71 @@
         });
     }
 
+    // ── Debug helper ──
+    function debugLog(msg) {
+        console.log(msg);
+        let debugEl = document.getElementById('debugLog');
+        if (!debugEl) {
+            debugEl = document.createElement('div');
+            debugEl.id = 'debugLog';
+            debugEl.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:11px;padding:8px;max-height:150px;overflow-y:auto;z-index:99999;';
+            document.body.appendChild(debugEl);
+        }
+        debugEl.innerHTML += msg + '<br>';
+        debugEl.scrollTop = debugEl.scrollHeight;
+    }
+
     // ── Load data from Cloud Storage ──
     async function loadData() {
+        debugLog('loadData: start');
         try {
+            debugLog('loadData: getting financeProjects2...');
             const data = await cloudGet('financeProjects2');
+            debugLog('loadData: got data, length=' + (data ? data.length : 0));
             if (data) {
                 projects = JSON.parse(data);
+                debugLog('loadData: parsed ' + projects.length + ' projects');
             }
+            debugLog('loadData: getting theme...');
             const theme = await cloudGet('theme');
             if (theme) {
                 document.documentElement.setAttribute('data-theme', theme);
             } else {
-                // Используем тему Telegram по умолчанию
                 const tgTheme = tg?.colorScheme || 'dark';
                 document.documentElement.setAttribute('data-theme', tgTheme);
             }
+            debugLog('loadData: theme done');
         } catch (e) {
+            debugLog('loadData ERROR: ' + e.message);
             console.error('Error loading data:', e);
         }
+        
+        debugLog('loadData: hiding overlay...');
         isLoading = false;
         document.getElementById('loadingOverlay').classList.add('hidden');
-        updateThemeIcon();
-        renderProjects();
-        updateStats();
+        
+        try {
+            debugLog('loadData: updateThemeIcon...');
+            updateThemeIcon();
+        } catch (e) {
+            debugLog('updateThemeIcon ERROR: ' + e.message);
+        }
+        
+        try {
+            debugLog('loadData: renderProjects...');
+            renderProjects();
+        } catch (e) {
+            debugLog('renderProjects ERROR: ' + e.message);
+        }
+        
+        try {
+            debugLog('loadData: updateStats...');
+            updateStats();
+        } catch (e) {
+            debugLog('updateStats ERROR: ' + e.message);
+        }
+        
+        debugLog('loadData: DONE');
     }
 
     // ── Save projects to Cloud Storage ──
