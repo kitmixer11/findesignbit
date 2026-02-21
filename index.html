@@ -649,6 +649,12 @@
     let editingTaskId = null;
     let editingProjectId = null;
     let isLoading = true;
+    const STORAGE_KEY_PREFIX = 'financeProjects3';
+
+    function getStorageKey() {
+        const userId = tg?.initDataUnsafe?.user?.id;
+        return userId ? `${STORAGE_KEY_PREFIX}:${userId}` : STORAGE_KEY_PREFIX;
+    }
 
     // ── Cloud Storage helpers ──
     function cloudGet(key) {
@@ -663,18 +669,71 @@
     function cloudSet(key, value) {
         return new Promise((resolve) => {
             tg.CloudStorage.setItem(key, value, (err, success) => {
-                resolve(success);
+                resolve(!err && success);
             });
         });
+    }
+
+    function parseStoredProjects(raw) {
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            return { projects: parsed, updatedAt: 0 };
+        }
+        if (parsed && Array.isArray(parsed.projects)) {
+            return {
+                projects: parsed.projects,
+                updatedAt: Number(parsed.updatedAt) || 0
+            };
+        }
+        return null;
+    }
+
+    async function loadStoredProjects() {
+        const mainKey = getStorageKey();
+        const mainRaw = await cloudGet(mainKey);
+        const mainData = parseStoredProjects(mainRaw);
+        if (mainData) {
+            return mainData;
+        }
+
+        // Миграция со старого ключа
+        const legacyRaw = await cloudGet('financeProjects2');
+        const legacyData = parseStoredProjects(legacyRaw);
+        if (legacyData) {
+            await cloudSet(mainKey, JSON.stringify({
+                projects: legacyData.projects,
+                updatedAt: Date.now()
+            }));
+            return legacyData;
+        }
+
+        return { projects: [], updatedAt: 0 };
+    }
+
+    async function refreshFromCloudIfChanged() {
+        try {
+            const remote = await loadStoredProjects();
+            const remoteUpdatedAt = Number(remote.updatedAt) || 0;
+            const localUpdatedAt = Number(window.__projectsUpdatedAt) || 0;
+            if (remoteUpdatedAt > localUpdatedAt) {
+                projects = remote.projects;
+                window.__projectsUpdatedAt = remoteUpdatedAt;
+                if (currentProjectId) renderProjectView(currentProjectId);
+                renderProjects();
+                updateStats();
+            }
+        } catch (e) {
+            console.error('Error refreshing data:', e);
+        }
     }
 
     // ── Load data from Cloud Storage ──
     async function loadData() {
         try {
-            const data = await cloudGet('financeProjects2');
-            if (data) {
-                projects = JSON.parse(data);
-            }
+            const stored = await loadStoredProjects();
+            projects = stored.projects;
+            window.__projectsUpdatedAt = Number(stored.updatedAt) || 0;
             const theme = await cloudGet('theme');
             if (theme) {
                 document.documentElement.setAttribute('data-theme', theme);
@@ -695,8 +754,21 @@
 
     // ── Save projects to Cloud Storage ──
     async function saveProjects() {
-        await cloudSet('financeProjects2', JSON.stringify(projects));
+        const payload = {
+            projects,
+            updatedAt: Date.now()
+        };
+        const saved = await cloudSet(getStorageKey(), JSON.stringify(payload));
+        if (saved) {
+            window.__projectsUpdatedAt = payload.updatedAt;
+        }
     }
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            refreshFromCloudIfChanged();
+        }
+    });
 
     // ── Theme ──
     // Тема загружается в loadData()
@@ -1052,4 +1124,3 @@
 </script>
 </body>
 </html>
-
