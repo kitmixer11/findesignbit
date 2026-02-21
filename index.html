@@ -638,11 +638,15 @@
 </div>
 
 <script>
-    // ── Telegram Web App Init ──
+    // ── Telegram Web App Init (безопасная версия) ──
     const tg = window.Telegram?.WebApp;
     if (tg) {
-        tg.ready();
-        tg.expand();
+        try {
+            tg.ready();
+            tg.expand();
+        } catch (e) {
+            console.warn('TG init error:', e);
+        }
     }
     
     // ── State ──
@@ -659,16 +663,24 @@
     // ── Storage helpers с fallback на localStorage ──
     function cloudGet(key) {
         return new Promise((resolve) => {
+            // Если CloudStorage недоступен — используем localStorage
             if (!useCloudStorage) {
-                // Fallback на localStorage
-                resolve(localStorage.getItem(key));
+                try {
+                    resolve(localStorage.getItem(key));
+                } catch (e) {
+                    resolve(null);
+                }
                 return;
             }
             
             // Таймаут на случай если CloudStorage зависнет
             const timeout = setTimeout(() => {
-                console.warn('CloudStorage.getItem timeout, falling back to localStorage');
-                resolve(localStorage.getItem(key));
+                console.warn('CloudStorage.getItem timeout');
+                try {
+                    resolve(localStorage.getItem(key));
+                } catch (e) {
+                    resolve(null);
+                }
             }, 3000);
             
             try {
@@ -676,7 +688,11 @@
                     clearTimeout(timeout);
                     if (err) {
                         console.warn('CloudStorage.getItem error:', err);
-                        resolve(localStorage.getItem(key));
+                        try {
+                            resolve(localStorage.getItem(key));
+                        } catch (e) {
+                            resolve(null);
+                        }
                     } else {
                         resolve(value || null);
                     }
@@ -684,7 +700,11 @@
             } catch (e) {
                 clearTimeout(timeout);
                 console.warn('CloudStorage.getItem exception:', e);
-                resolve(localStorage.getItem(key));
+                try {
+                    resolve(localStorage.getItem(key));
+                } catch (e2) {
+                    resolve(null);
+                }
             }
         });
     }
@@ -698,6 +718,7 @@
                 console.warn('localStorage.setItem error:', e);
             }
             
+            // Если CloudStorage недоступен — готово
             if (!useCloudStorage) {
                 resolve(true);
                 return;
@@ -705,90 +726,45 @@
             
             const timeout = setTimeout(() => {
                 console.warn('CloudStorage.setItem timeout');
-                resolve(true); // localStorage уже сохранён
+                resolve(true);
             }, 3000);
             
             try {
                 tg.CloudStorage.setItem(key, value, (err, success) => {
                     clearTimeout(timeout);
-                    if (err) {
-                        console.warn('CloudStorage.setItem error:', err);
-                    }
                     resolve(!err && success);
                 });
             } catch (e) {
                 clearTimeout(timeout);
                 console.warn('CloudStorage.setItem exception:', e);
-                resolve(true); // localStorage уже сохранён
+                resolve(true);
             }
         });
     }
 
-    // ── Debug helper ──
-    function debugLog(msg) {
-        console.log(msg);
-        let debugEl = document.getElementById('debugLog');
-        if (!debugEl) {
-            debugEl = document.createElement('div');
-            debugEl.id = 'debugLog';
-            debugEl.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:11px;padding:8px;max-height:150px;overflow-y:auto;z-index:99999;';
-            document.body.appendChild(debugEl);
-        }
-        debugEl.innerHTML += msg + '<br>';
-        debugEl.scrollTop = debugEl.scrollHeight;
-    }
-
     // ── Load data from Cloud Storage ──
     async function loadData() {
-        debugLog('loadData: start');
         try {
-            debugLog('loadData: getting financeProjects2...');
             const data = await cloudGet('financeProjects2');
-            debugLog('loadData: got data, length=' + (data ? data.length : 0));
             if (data) {
                 projects = JSON.parse(data);
-                debugLog('loadData: parsed ' + projects.length + ' projects');
             }
-            debugLog('loadData: getting theme...');
             const theme = await cloudGet('theme');
             if (theme) {
                 document.documentElement.setAttribute('data-theme', theme);
             } else {
+                // Используем тему Telegram по умолчанию
                 const tgTheme = tg?.colorScheme || 'dark';
                 document.documentElement.setAttribute('data-theme', tgTheme);
             }
-            debugLog('loadData: theme done');
         } catch (e) {
-            debugLog('loadData ERROR: ' + e.message);
             console.error('Error loading data:', e);
         }
-        
-        debugLog('loadData: hiding overlay...');
         isLoading = false;
         document.getElementById('loadingOverlay').classList.add('hidden');
-        
-        try {
-            debugLog('loadData: updateThemeIcon...');
-            updateThemeIcon();
-        } catch (e) {
-            debugLog('updateThemeIcon ERROR: ' + e.message);
-        }
-        
-        try {
-            debugLog('loadData: renderProjects...');
-            renderProjects();
-        } catch (e) {
-            debugLog('renderProjects ERROR: ' + e.message);
-        }
-        
-        try {
-            debugLog('loadData: updateStats...');
-            updateStats();
-        } catch (e) {
-            debugLog('updateStats ERROR: ' + e.message);
-        }
-        
-        debugLog('loadData: DONE');
+        updateThemeIcon();
+        renderProjects();
+        updateStats();
     }
 
     // ── Save projects to Cloud Storage ──
