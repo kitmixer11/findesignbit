@@ -450,31 +450,6 @@
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-        /* ── Responsive ── */
-        @media (max-width: 900px) {
-            .dashboard-top { grid-template-columns: 1fr; }
-            .chart-panel { min-height: 0; }
-        }
-        @media (max-width: 768px) {
-            .container { padding: 1rem; }
-            .stats-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-            .cards-grid { grid-template-columns: 1fr; }
-            .modal-content { padding: 1.25rem; width: 95%; }
-            .stat-value { font-size: 1.25rem; }
-            .project-header-stats { display: none; }
-            
-            /* Скрываем таблицу на мобилке */
-            .tasks-table { display: none; }
-            
-            /* Показываем карточки */
-            .tasks-mobile { display: block; }
-        }
-        @media (max-width: 480px) {
-            .stats-grid { grid-template-columns: 1fr; }
-            h1 { font-size: 1.1rem; }
-            .btn { padding: 0.5rem 1rem; font-size: 0.8rem; }
-        }
-
         /* ── Mobile task cards (скрыты по умолчанию) ── */
         .tasks-mobile {
             display: none;
@@ -603,9 +578,33 @@
         .project-stats-mobile .stat-value.total { color: var(--text-primary); }
         .project-stats-mobile .stat-value.net { color: var(--success); }
         .project-stats-mobile .stat-value.tax { color: var(--text-muted); }
-        
+
+        /* ── Responsive ── */
+        @media (max-width: 900px) {
+            .dashboard-top { grid-template-columns: 1fr; }
+            .chart-panel { min-height: 0; }
+        }
         @media (max-width: 768px) {
-            .project-stats-mobile { display: grid; }
+            .container { padding: 1rem; }
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+            .cards-grid { grid-template-columns: 1fr; }
+            .modal-content { padding: 1.25rem; width: 95%; }
+            .stat-value { font-size: 1.25rem; }
+            .project-header-stats { display: none; }
+            
+            /* Скрываем таблицу на мобилке */
+            .tasks-table { display: none !important; }
+            
+            /* Показываем карточки */
+            .tasks-mobile { display: block !important; }
+            
+            /* Показываем мобильную статистику */
+            .project-stats-mobile { display: grid !important; }
+        }
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 1.1rem; }
+            .btn { padding: 0.5rem 1rem; font-size: 0.8rem; }
         }
     </style>
 </head>
