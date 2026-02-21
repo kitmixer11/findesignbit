@@ -600,6 +600,28 @@
             
             /* Показываем мобильную статистику */
             .project-stats-mobile { display: grid !important; }
+            
+            /* Фикс для date input на мобилке */
+            .form-input[type="date"] {
+                width: 100%;
+                min-width: 0;
+                -webkit-appearance: none;
+                appearance: none;
+            }
+            
+            /* Уменьшаем модалку */
+            .modal-content {
+                max-height: 85vh;
+                margin: 1rem;
+            }
+            
+            .form-group {
+                margin-bottom: 1rem;
+            }
+            
+            .form-input, .form-textarea {
+                font-size: 16px; /* Предотвращает зум на iOS */
+            }
         }
         @media (max-width: 480px) {
             .stats-grid { grid-template-columns: 1fr; }
@@ -1168,6 +1190,7 @@
         // Mobile cards
         if (mobileContainer) {
             let mobileHtml = '';
+            console.log('Rendering mobile cards for', proj.tasks.length, 'tasks');
             for (const task of proj.tasks) {
                 const pc = task.paid ? 'paid' : '';
                 mobileHtml += `<div class="task-card ${pc}">`;
@@ -1196,6 +1219,9 @@
                 mobileHtml += `</div>`;
             }
             mobileContainer.innerHTML = mobileHtml;
+            console.log('Mobile container updated, innerHTML length:', mobileContainer.innerHTML.length);
+        } else {
+            console.warn('Mobile container not found!');
         }
     }
 
