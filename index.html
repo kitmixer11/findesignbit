@@ -931,14 +931,12 @@
 </div>
 
 <script>
-    // ── Telegram Web App Init (безопасная версия) ──
+    // ── Telegram Web App Init ──
     const tg = window.Telegram?.WebApp;
     if (tg) {
         try {
             tg.ready();
             tg.expand();
-            // Предупреждение при закрытии — даёт время дозаписать данные
-            if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
         } catch (e) {
             console.warn('TG init error:', e);
         }
@@ -1025,28 +1023,34 @@
 
     function cloudSet(key, value) {
         return new Promise((resolve) => {
-            // Всегда сохраняем в localStorage как бэкап
+            // localStorage — основное хранилище, сохраняем синхронно
             try {
                 localStorage.setItem(key, value);
             } catch (e) {
                 console.warn('localStorage.setItem error:', e);
             }
-            
-            // Если CloudStorage недоступен — готово
+
+            // Если CloudStorage недоступен — данные уже в localStorage, всё ок
             if (!useCloudStorage) {
                 resolve(true);
                 return;
             }
-            
+
             const timeout = setTimeout(() => {
-                console.warn('CloudStorage.setItem timeout — используем localStorage fallback');
+                console.warn('CloudStorage.setItem timeout — данные сохранены в localStorage');
                 resolve(true);
             }, 5000);
-            
+
             try {
-                tg.CloudStorage.setItem(key, value, (err, success) => {
+                tg.CloudStorage.setItem(key, value, (err, result) => {
                     clearTimeout(timeout);
-                    resolve(!err && success);
+                    if (err) {
+                        // Не критично — localStorage уже сохранён
+                        console.warn('CloudStorage.setItem error (localStorage ok):', err);
+                    } else {
+                        console.log('CloudStorage.setItem ok');
+                    }
+                    resolve(true); // всегда успех — localStorage надёжен
                 });
             } catch (e) {
                 clearTimeout(timeout);
@@ -1081,10 +1085,10 @@
         updateStats();
     }
 
-    // ── Save projects to Cloud Storage ──
+    // ── Save projects ──
     async function saveProjects() {
-        const ok = await cloudSet('financeProjects2', JSON.stringify(projects));
-        showSaveStatus(ok !== false);
+        await cloudSet('financeProjects2', JSON.stringify(projects));
+        showSaveStatus(true);
     }
 
     // ── Theme ──
