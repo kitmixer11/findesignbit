@@ -934,15 +934,75 @@
     // ── Telegram Web App Init ──
     const tg = window.Telegram?.WebApp;
     if (tg) {
-        try {
-            tg.ready();
-            tg.expand();
-        } catch (e) {
-            console.warn('TG init error:', e);
-        }
+        try { tg.ready(); tg.expand(); } catch(e) {}
     }
-    
-    // ── Save status indicator ──
+
+    // ── State ──
+    let projects = [];
+    let currentProjectId = null;
+    let editingTaskId = null;
+    let editingProjectId = null;
+
+    // ── Определяем метод хранения ──
+    // В Telegram Mini App localStorage может быть заблокирован.
+    // Используем CloudStorage если доступен, иначе localStorage.
+    const CS = tg?.CloudStorage;
+    const hasTgCloud = !!(CS && typeof CS.setItem === 'function' && typeof CS.getItem === 'function');
+    console.log('Storage: hasTgCloud =', hasTgCloud);
+
+    function storageSet(key, value) {
+        return new Promise((resolve) => {
+            if (hasTgCloud) {
+                CS.setItem(key, value, (err) => {
+                    if (err) console.warn('CS.setItem err:', err);
+                    resolve();
+                });
+            } else {
+                try { localStorage.setItem(key, value); } catch(e) { console.warn(e); }
+                resolve();
+            }
+        });
+    }
+
+    function storageGet(key) {
+        return new Promise((resolve) => {
+            if (hasTgCloud) {
+                CS.getItem(key, (err, val) => {
+                    if (err) { console.warn('CS.getItem err:', err); resolve(null); }
+                    else resolve(val || null);
+                });
+            } else {
+                try { resolve(localStorage.getItem(key)); }
+                catch(e) { resolve(null); }
+            }
+        });
+    }
+
+    // ── Save / Load ──
+    async function saveProjects() {
+        await storageSet('financeProjects2', JSON.stringify(projects));
+        showSaveStatus(true);
+    }
+
+    async function loadData() {
+        try {
+            const data = await storageGet('financeProjects2');
+            if (data) projects = JSON.parse(data);
+        } catch(e) { console.error('loadData error:', e); }
+
+        try {
+            const theme = await storageGet('theme');
+            document.documentElement.setAttribute('data-theme',
+                theme || tg?.colorScheme || 'dark');
+        } catch(e) {}
+
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        updateThemeIcon();
+        renderProjects();
+        updateStats();
+    }
+
+    // ── Save status ──
     let saveTimeout = null;
     function showSaveStatus(ok) {
         let el = document.getElementById('saveStatus');
@@ -959,137 +1019,6 @@
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(() => { el.style.opacity = '0'; }, 2000);
     }
-    let projects = [];
-    let currentProjectId = null;
-    let editingTaskId = null;
-    let editingProjectId = null;
-    let isLoading = true;
-    
-    // Проверяем доступность CloudStorage
-    const useCloudStorage = !!(tg && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function');
-    console.log('CloudStorage available:', useCloudStorage);
-
-    // ── Storage helpers с fallback на localStorage ──
-    function cloudGet(key) {
-        return new Promise((resolve) => {
-            // Если CloudStorage недоступен — используем localStorage
-            if (!useCloudStorage) {
-                try {
-                    resolve(localStorage.getItem(key));
-                } catch (e) {
-                    resolve(null);
-                }
-                return;
-            }
-            
-            // Таймаут на случай если CloudStorage зависнет
-            const timeout = setTimeout(() => {
-                console.warn('CloudStorage.getItem timeout — fallback to localStorage');
-                try {
-                    resolve(localStorage.getItem(key));
-                } catch (e) {
-                    resolve(null);
-                }
-            }, 5000);
-            
-            try {
-                tg.CloudStorage.getItem(key, (err, value) => {
-                    clearTimeout(timeout);
-                    if (err || !value) {
-                        // CloudStorage пустой или ошибка — берём из localStorage
-                        console.warn('CloudStorage.getItem issue, using localStorage fallback:', err || 'empty value');
-                        try {
-                            resolve(localStorage.getItem(key));
-                        } catch (e) {
-                            resolve(null);
-                        }
-                    } else {
-                        // Синхронизируем localStorage с CloudStorage
-                        try { localStorage.setItem(key, value); } catch(e) {}
-                        resolve(value);
-                    }
-                });
-            } catch (e) {
-                clearTimeout(timeout);
-                console.warn('CloudStorage.getItem exception:', e);
-                try {
-                    resolve(localStorage.getItem(key));
-                } catch (e2) {
-                    resolve(null);
-                }
-            }
-        });
-    }
-
-    function cloudSet(key, value) {
-        return new Promise((resolve) => {
-            // localStorage — основное хранилище, сохраняем синхронно
-            try {
-                localStorage.setItem(key, value);
-            } catch (e) {
-                console.warn('localStorage.setItem error:', e);
-            }
-
-            // Если CloudStorage недоступен — данные уже в localStorage, всё ок
-            if (!useCloudStorage) {
-                resolve(true);
-                return;
-            }
-
-            const timeout = setTimeout(() => {
-                console.warn('CloudStorage.setItem timeout — данные сохранены в localStorage');
-                resolve(true);
-            }, 5000);
-
-            try {
-                tg.CloudStorage.setItem(key, value, (err, result) => {
-                    clearTimeout(timeout);
-                    if (err) {
-                        // Не критично — localStorage уже сохранён
-                        console.warn('CloudStorage.setItem error (localStorage ok):', err);
-                    } else {
-                        console.log('CloudStorage.setItem ok');
-                    }
-                    resolve(true); // всегда успех — localStorage надёжен
-                });
-            } catch (e) {
-                clearTimeout(timeout);
-                console.warn('CloudStorage.setItem exception:', e);
-                resolve(true);
-            }
-        });
-    }
-
-    // ── Load data from Cloud Storage ──
-    async function loadData() {
-        try {
-            const data = await cloudGet('financeProjects2');
-            if (data) {
-                projects = JSON.parse(data);
-            }
-            const theme = await cloudGet('theme');
-            if (theme) {
-                document.documentElement.setAttribute('data-theme', theme);
-            } else {
-                // Используем тему Telegram по умолчанию
-                const tgTheme = tg?.colorScheme || 'dark';
-                document.documentElement.setAttribute('data-theme', tgTheme);
-            }
-        } catch (e) {
-            console.error('Error loading data:', e);
-        }
-        isLoading = false;
-        document.getElementById('loadingOverlay').classList.add('hidden');
-        updateThemeIcon();
-        renderProjects();
-        updateStats();
-    }
-
-    // ── Save projects ──
-    async function saveProjects() {
-        await cloudSet('financeProjects2', JSON.stringify(projects));
-        showSaveStatus(true);
-    }
 
     // ── Theme ──
     // Тема загружается в loadData()
@@ -1104,7 +1033,7 @@
         const cur = document.documentElement.getAttribute('data-theme');
         const next = cur === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', next);
-        await cloudSet('theme', next);
+        await storageSet('theme', next);
         updateThemeIcon();
         renderChart();
     });
