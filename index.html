@@ -579,6 +579,75 @@
         .project-stats-mobile .stat-value.net { color: var(--success); }
         .project-stats-mobile .stat-value.tax { color: var(--text-muted); }
 
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 11px;
+            padding: 0.3rem;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            color: var(--text-muted);
+            background: transparent;
+            transition: all 0.18s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+        .tab-btn.active {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+        }
+        .tab-btn .tab-count {
+            font-size: 0.72rem;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 0.05rem 0.4rem;
+            font-weight: 700;
+        }
+        .tab-btn:not(.active) .tab-count {
+            background: var(--border);
+            color: var(--text-muted);
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ── History section ── */
+        .history-summary {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+        .history-summary-item { text-align: center; }
+        .history-summary-label {
+            font-size: 0.65rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.07em;
+            color: var(--text-muted); margin-bottom: 0.2rem;
+        }
+        .history-summary-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem; font-weight: 700;
+            color: var(--success);
+        }
+
         /* ── Responsive ── */
         @media (max-width: 900px) {
             .dashboard-top { grid-template-columns: 1fr; }
@@ -671,7 +740,7 @@
                     <div class="stat-sublabel" id="statTax">Налог: 0 ₽</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">К получению</div>
+                    <div class="stat-label">С учётом налога</div>
                     <div class="stat-value" id="statNetAmount">0 ₽</div>
                 </div>
                 <div class="stat-card">
@@ -709,12 +778,12 @@
                 </div>
                 <div class="project-header-divider"></div>
                 <div class="project-stat-block">
-                    <div class="project-stat-label">К получению</div>
+                    <div class="project-stat-label">С учётом налога</div>
                     <div class="project-stat-value net" id="projectViewNet"></div>
                 </div>
                 <div class="project-header-divider"></div>
                 <div class="project-stat-block">
-                    <div class="project-stat-label">Налог 6%</div>
+                    <div class="project-stat-label">Налог (~6.38%)</div>
                     <div class="project-stat-value tax" id="projectViewTax"></div>
                 </div>
             </div>
@@ -728,38 +797,80 @@
                 <div class="stat-value total" id="projectViewTotalMobile"></div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">К получению</div>
+                <div class="stat-label">С учётом налога</div>
                 <div class="stat-value net" id="projectViewNetMobile"></div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">Налог 6%</div>
+                <div class="stat-label">Налог (~6.38%)</div>
                 <div class="stat-value tax" id="projectViewTaxMobile"></div>
             </div>
         </div>
 
-        <!-- Desktop table -->
-        <div class="tasks-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:46px;"></th>
-                        <th>Задача</th>
-                        <th>Описание</th>
-                        <th>Сумма</th>
-                        <th>Дата</th>
-                        <th>Дата оплаты</th>
-                        <th style="width:80px;"></th>
-                    </tr>
-                </thead>
-                <tbody id="tasksTableBody">
-                    <tr><td colspan="6" class="empty-state">Нет задач</td></tr>
-                </tbody>
-            </table>
+        <!-- Desktop table — Active tasks -->
+        <div id="tabsContainer">
+            <div class="tabs">
+                <button class="tab-btn active" id="tabActive" onclick="switchTab('active')">
+                    Активные <span class="tab-count" id="tabActiveCount">0</span>
+                </button>
+                <button class="tab-btn" id="tabHistory" onclick="switchTab('history')">
+                    История <span class="tab-count" id="tabHistoryCount">0</span>
+                </button>
+            </div>
+
+            <!-- Active tab -->
+            <div class="tab-panel active" id="panelActive">
+                <div class="tasks-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:46px;"></th>
+                                <th>Задача</th>
+                                <th>Описание</th>
+                                <th>Сумма</th>
+                                <th>Дата</th>
+                                <th style="width:80px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tasksTableBody">
+                            <tr><td colspan="6" class="empty-state">Нет задач</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="tasks-mobile" id="tasksMobileContainer"></div>
+            </div>
+
+            <!-- History tab -->
+            <div class="tab-panel" id="panelHistory">
+                <div class="history-summary" id="historySummary" style="display:none;">
+                    <div class="history-summary-item">
+                        <div class="history-summary-label">Получено всего</div>
+                        <div class="history-summary-value" id="historyTotal">0 ₽</div>
+                    </div>
+                    <div class="history-summary-item">
+                        <div class="history-summary-label">Задач</div>
+                        <div class="history-summary-value" id="historyCount" style="color:var(--text-secondary);">0</div>
+                    </div>
+                </div>
+                <div class="tasks-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:46px;"></th>
+                                <th>Задача</th>
+                                <th>Описание</th>
+                                <th>Сумма</th>
+                                <th>Дата оплаты</th>
+                                <th style="width:80px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr><td colspan="6" class="empty-state">История пуста</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="tasks-mobile" id="historyMobileContainer"></div>
+            </div>
         </div>
-        
-        <!-- Mobile cards -->
-        <div class="tasks-mobile" id="tasksMobileContainer"></div>
-    </div>
 
 </div><!-- /container -->
 
@@ -826,12 +937,30 @@
         try {
             tg.ready();
             tg.expand();
+            // Предупреждение при закрытии — даёт время дозаписать данные
+            if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
         } catch (e) {
             console.warn('TG init error:', e);
         }
     }
     
-    // ── State ──
+    // ── Save status indicator ──
+    let saveTimeout = null;
+    function showSaveStatus(ok) {
+        let el = document.getElementById('saveStatus');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'saveStatus';
+            el.style.cssText = 'position:fixed;bottom:1.2rem;right:1.2rem;padding:0.4rem 0.9rem;border-radius:8px;font-size:0.78rem;font-weight:600;z-index:9998;transition:opacity 0.4s;pointer-events:none;';
+            document.body.appendChild(el);
+        }
+        el.textContent = ok ? '✓ Сохранено' : '⚠ Ошибка сохранения';
+        el.style.background = ok ? 'var(--success)' : '#ef4444';
+        el.style.color = '#fff';
+        el.style.opacity = '1';
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => { el.style.opacity = '0'; }, 2000);
+    }
     let projects = [];
     let currentProjectId = null;
     let editingTaskId = null;
@@ -857,26 +986,29 @@
             
             // Таймаут на случай если CloudStorage зависнет
             const timeout = setTimeout(() => {
-                console.warn('CloudStorage.getItem timeout');
+                console.warn('CloudStorage.getItem timeout — fallback to localStorage');
                 try {
                     resolve(localStorage.getItem(key));
                 } catch (e) {
                     resolve(null);
                 }
-            }, 3000);
+            }, 5000);
             
             try {
                 tg.CloudStorage.getItem(key, (err, value) => {
                     clearTimeout(timeout);
-                    if (err) {
-                        console.warn('CloudStorage.getItem error:', err);
+                    if (err || !value) {
+                        // CloudStorage пустой или ошибка — берём из localStorage
+                        console.warn('CloudStorage.getItem issue, using localStorage fallback:', err || 'empty value');
                         try {
                             resolve(localStorage.getItem(key));
                         } catch (e) {
                             resolve(null);
                         }
                     } else {
-                        resolve(value || null);
+                        // Синхронизируем localStorage с CloudStorage
+                        try { localStorage.setItem(key, value); } catch(e) {}
+                        resolve(value);
                     }
                 });
             } catch (e) {
@@ -907,9 +1039,9 @@
             }
             
             const timeout = setTimeout(() => {
-                console.warn('CloudStorage.setItem timeout');
+                console.warn('CloudStorage.setItem timeout — используем localStorage fallback');
                 resolve(true);
-            }, 3000);
+            }, 5000);
             
             try {
                 tg.CloudStorage.setItem(key, value, (err, success) => {
@@ -951,7 +1083,8 @@
 
     // ── Save projects to Cloud Storage ──
     async function saveProjects() {
-        await cloudSet('financeProjects2', JSON.stringify(projects));
+        const ok = await cloudSet('financeProjects2', JSON.stringify(projects));
+        showSaveStatus(ok !== false);
     }
 
     // ── Theme ──
@@ -1036,7 +1169,7 @@
     document.getElementById('backBtn').addEventListener('click', showMainView);
 
     // ── Forms ──
-    document.getElementById('projectForm').addEventListener('submit', function(e) {
+    document.getElementById('projectForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         const name = document.getElementById('projectName').value.trim();
         if (!name) return;
@@ -1046,13 +1179,13 @@
         } else {
             projects.push({ id: Date.now(), name, tasks: [] });
         }
-        saveProjects();
+        await saveProjects();
         renderProjects();
         updateStats();
         closeProjectModal();
     });
 
-    document.getElementById('taskForm').addEventListener('submit', function(e) {
+    document.getElementById('taskForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         const name = document.getElementById('taskName').value.trim();
         const description = document.getElementById('taskDescription').value.trim();
@@ -1070,7 +1203,7 @@
         } else {
             proj.tasks.push({ id: Date.now(), name, description, amount, date, paidDate, paid: false });
         }
-        saveProjects();
+        await saveProjects();
         renderProjectView(currentProjectId);
         updateStats();
         closeTaskModal();
@@ -1107,9 +1240,12 @@
 
         let html = '';
         for (const proj of projects) {
-            let total = 0, paid = 0;
-            for (const t of proj.tasks) { total += t.amount; if (t.paid) paid++; }
-            const tax = total * 0.06, net = total - tax;
+            let total = 0, paid = 0, activeCount = 0;
+            for (const t of proj.tasks) {
+                if (!t.paid) { total += t.amount; activeCount++; }
+                else paid++;
+            }
+            const tax = Math.ceil(total * (0.06 / 0.94) * 100) / 100, net = total + tax;
             const color = getColor(proj.name);
 
             html += `<div class="project-card" onclick="openProject(${proj.id})">`;
@@ -1121,11 +1257,22 @@
             html += `<button class="icon-btn" onclick="event.stopPropagation();deleteProject(${proj.id})" title="Удалить">${DEL_ICO}</button>`;
             html += `</div></div>`;
             html += `<div class="card-amount">${fmt(total)} ₽</div>`;
-            html += `<div class="card-net-row"><span class="card-net-label">К получению</span><span class="card-net-value">${fmt(net)} ₽</span></div>`;
-            html += `<div class="card-footer"><span>${proj.tasks.length} задач${paid > 0 ? ' · ' + paid + ' опл.' : ''}</span><span>Налог ${fmt(tax)} ₽</span></div>`;
+            html += `<div class="card-net-row"><span class="card-net-label">С учётом налога</span><span class="card-net-value">${fmt(net)} ₽</span></div>`;
+            html += `<div class="card-footer"><span>${activeCount} активных${paid > 0 ? ' · ' + paid + ' выполнено' : ''}</span><span>Налог ${fmt(tax)} ₽</span></div>`;
             html += `</div>`;
         }
         grid.innerHTML = html;
+    }
+
+    // ── Tab state ──
+    let currentTab = 'active';
+
+    function switchTab(tab) {
+        currentTab = tab;
+        document.getElementById('tabActive').classList.toggle('active', tab === 'active');
+        document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+        document.getElementById('panelActive').classList.toggle('active', tab === 'active');
+        document.getElementById('panelHistory').classList.toggle('active', tab === 'history');
     }
 
     // ── Render: project detail ──
@@ -1133,114 +1280,167 @@
         const proj = projects.find(p => p.id === id);
         if (!proj) return;
 
+        const activeTasks  = proj.tasks.filter(t => !t.paid);
+        const historyTasks = proj.tasks.filter(t => t.paid);
+
+        // Суммы считаются ТОЛЬКО по активным (неоплаченным) задачам
         let total = 0;
-        for (const t of proj.tasks) total += t.amount;
-        const tax = total * 0.06, net = total - tax;
+        for (const t of activeTasks) total += t.amount;
+        const tax = Math.ceil(total * (0.06 / 0.94) * 100) / 100, net = total + tax;
 
         // Desktop stats
         document.getElementById('projectViewTitle').textContent = proj.name;
         document.getElementById('projectViewTotal').textContent = fmt(total) + ' ₽';
         document.getElementById('projectViewNet').textContent   = fmt(net)   + ' ₽';
         document.getElementById('projectViewTax').textContent   = fmt(tax)   + ' ₽';
-        
+
         // Mobile stats
         const mobileTotal = document.getElementById('projectViewTotalMobile');
-        const mobileNet = document.getElementById('projectViewNetMobile');
-        const mobileTax = document.getElementById('projectViewTaxMobile');
+        const mobileNet   = document.getElementById('projectViewNetMobile');
+        const mobileTax   = document.getElementById('projectViewTaxMobile');
         if (mobileTotal) mobileTotal.textContent = fmt(total) + ' ₽';
-        if (mobileNet) mobileNet.textContent = fmt(net) + ' ₽';
-        if (mobileTax) mobileTax.textContent = fmt(tax) + ' ₽';
+        if (mobileNet)   mobileNet.textContent   = fmt(net)   + ' ₽';
+        if (mobileTax)   mobileTax.textContent   = fmt(tax)   + ' ₽';
 
-        const tbody = document.getElementById('tasksTableBody');
-        const mobileContainer = document.getElementById('tasksMobileContainer');
-        
-        if (proj.tasks.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Нет задач<br><button class="btn btn-primary btn-small" style="margin-top:1rem;" onclick="openTaskModal()">Добавить первую задачу</button></td></tr>';
-            if (mobileContainer) {
-                mobileContainer.innerHTML = '<div class="empty-state" style="text-align:center;padding:2rem;">Нет задач<br><button class="btn btn-primary btn-small" style="margin-top:1rem;" onclick="openTaskModal()">Добавить первую задачу</button></div>';
-            }
-            return;
-        }
+        // Tab counters
+        document.getElementById('tabActiveCount').textContent  = activeTasks.length;
+        document.getElementById('tabHistoryCount').textContent = historyTasks.length;
 
         const CHECK_ICO = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+        const UNDO_ICO  = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>';
         const EDIT_ICO  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
         const DEL_ICO   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
-        // Desktop table
-        let html = '';
-        for (const task of proj.tasks) {
-            const pc = task.paid ? 'paid' : '';
-            const paidDateDisplay = task.paidDate
-                ? `<span style="color:var(--success);font-size:0.82rem;">${fmtDate(task.paidDate)}</span>`
-                : `<span style="color:var(--text-muted);font-size:0.82rem;">—</span>`;
-            html += `<tr class="task-row ${pc}">`;
-            html += `<td><div class="task-checkbox ${pc}" onclick="toggleTaskPaid(${task.id})">${task.paid ? CHECK_ICO : ''}</div></td>`;
-            html += `<td><strong>${task.name}</strong></td>`;
-            html += `<td class="task-description">${task.description || '—'}</td>`;
-            html += `<td class="task-amount">${fmt(task.amount)} ₽</td>`;
-            html += `<td style="color:var(--text-muted);font-size:0.82rem;">${fmtDate(task.date)}</td>`;
-            html += `<td>${paidDateDisplay}</td>`;
-            html += `<td><div style="display:flex;gap:0.25rem;">`;
-            html += `<button class="icon-btn" onclick="openTaskModal(${task.id})" title="Редактировать">${EDIT_ICO}</button>`;
-            html += `<button class="icon-btn" onclick="deleteTask(${task.id})" title="Удалить">${DEL_ICO}</button>`;
-            html += `</div></td></tr>`;
-        }
-        tbody.innerHTML = html;
-        
-        // Mobile cards
-        if (mobileContainer) {
-            let mobileHtml = '';
-            console.log('Rendering mobile cards for', proj.tasks.length, 'tasks');
-            for (const task of proj.tasks) {
-                const pc = task.paid ? 'paid' : '';
-                mobileHtml += `<div class="task-card ${pc}">`;
-                mobileHtml += `<div class="task-card-header">`;
-                mobileHtml += `<div class="task-card-checkbox ${pc}" onclick="toggleTaskPaid(${task.id})">${task.paid ? CHECK_ICO : ''}</div>`;
-                mobileHtml += `<div class="task-card-main">`;
-                mobileHtml += `<div class="task-card-name">${task.name}</div>`;
-                if (task.description) {
-                    mobileHtml += `<div class="task-card-desc">${task.description}</div>`;
-                }
-                mobileHtml += `<div class="task-card-amount">${fmt(task.amount)} ₽</div>`;
-                mobileHtml += `</div>`;
-                mobileHtml += `</div>`;
-                mobileHtml += `<div class="task-card-actions">`;
-                mobileHtml += `<button class="icon-btn" onclick="openTaskModal(${task.id})" title="Редактировать">${EDIT_ICO}</button>`;
-                mobileHtml += `<button class="icon-btn" onclick="deleteTask(${task.id})" title="Удалить">${DEL_ICO}</button>`;
-                mobileHtml += `</div>`;
-                mobileHtml += `<div class="task-card-footer">`;
-                mobileHtml += `<div class="task-card-date">`;
-                mobileHtml += `<span>Создано: ${fmtDate(task.date)}</span>`;
-                if (task.paidDate) {
-                    mobileHtml += `<span class="task-card-paid-date">Оплачено: ${fmtDate(task.paidDate)}</span>`;
-                }
-                mobileHtml += `</div>`;
-                mobileHtml += `</div>`;
-                mobileHtml += `</div>`;
-            }
-            mobileContainer.innerHTML = mobileHtml;
-            console.log('Mobile container updated, innerHTML length:', mobileContainer.innerHTML.length);
+        // ── Active tab — Desktop ──
+        const tbody = document.getElementById('tasksTableBody');
+        if (activeTasks.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);">Все задачи выполнены 🎉<br><button class="btn btn-primary btn-small" style="margin-top:1rem;" onclick="openTaskModal()">Добавить задачу</button></td></tr>';
         } else {
-            console.warn('Mobile container not found!');
+            let html = '';
+            for (const task of activeTasks) {
+                html += `<tr class="task-row">`;
+                html += `<td><div class="task-checkbox" onclick="toggleTaskPaid(${task.id})" title="Отметить оплаченной"></div></td>`;
+                html += `<td><strong>${task.name}</strong></td>`;
+                html += `<td class="task-description">${task.description || '—'}</td>`;
+                html += `<td class="task-amount">${fmt(task.amount)} ₽</td>`;
+                html += `<td style="color:var(--text-muted);font-size:0.82rem;">${fmtDate(task.date)}</td>`;
+                html += `<td><div style="display:flex;gap:0.25rem;">`;
+                html += `<button class="icon-btn" onclick="openTaskModal(${task.id})" title="Редактировать">${EDIT_ICO}</button>`;
+                html += `<button class="icon-btn" onclick="deleteTask(${task.id})" title="Удалить">${DEL_ICO}</button>`;
+                html += `</div></td></tr>`;
+            }
+            tbody.innerHTML = html;
+        }
+
+        // ── Active tab — Mobile ──
+        const mobileContainer = document.getElementById('tasksMobileContainer');
+        if (mobileContainer) {
+            if (activeTasks.length === 0) {
+                mobileContainer.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted);">Все задачи выполнены 🎉<br><button class="btn btn-primary btn-small" style="margin-top:1rem;" onclick="openTaskModal()">Добавить задачу</button></div>';
+            } else {
+                let mobileHtml = '';
+                for (const task of activeTasks) {
+                    mobileHtml += `<div class="task-card">`;
+                    mobileHtml += `<div class="task-card-header">`;
+                    mobileHtml += `<div class="task-card-checkbox" onclick="toggleTaskPaid(${task.id})" title="Отметить оплаченной"></div>`;
+                    mobileHtml += `<div class="task-card-main">`;
+                    mobileHtml += `<div class="task-card-name">${task.name}</div>`;
+                    if (task.description) mobileHtml += `<div class="task-card-desc">${task.description}</div>`;
+                    mobileHtml += `<div class="task-card-amount">${fmt(task.amount)} ₽</div>`;
+                    mobileHtml += `</div></div>`;
+                    mobileHtml += `<div class="task-card-actions">`;
+                    mobileHtml += `<button class="icon-btn" onclick="openTaskModal(${task.id})">${EDIT_ICO}</button>`;
+                    mobileHtml += `<button class="icon-btn" onclick="deleteTask(${task.id})">${DEL_ICO}</button>`;
+                    mobileHtml += `</div>`;
+                    mobileHtml += `<div class="task-card-footer"><span>Создано: ${fmtDate(task.date)}</span></div>`;
+                    mobileHtml += `</div>`;
+                }
+                mobileContainer.innerHTML = mobileHtml;
+            }
+        }
+
+        // ── History tab — Summary ──
+        const histSummary = document.getElementById('historySummary');
+        if (historyTasks.length > 0) {
+            let histTotal = 0;
+            for (const t of historyTasks) histTotal += t.amount;
+            document.getElementById('historyTotal').textContent = fmt(histTotal) + ' ₽';
+            document.getElementById('historyCount').textContent = historyTasks.length;
+            histSummary.style.display = 'flex';
+        } else {
+            histSummary.style.display = 'none';
+        }
+
+        // ── History tab — Desktop ──
+        const histTbody = document.getElementById('historyTableBody');
+        if (historyTasks.length === 0) {
+            histTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);">История пуста</td></tr>';
+        } else {
+            let html = '';
+            for (const task of historyTasks) {
+                html += `<tr class="task-row paid">`;
+                html += `<td><div class="task-checkbox paid" onclick="toggleTaskPaid(${task.id})" title="Вернуть в активные">${CHECK_ICO}</div></td>`;
+                html += `<td><strong style="text-decoration:line-through;opacity:0.7;">${task.name}</strong></td>`;
+                html += `<td class="task-description">${task.description || '—'}</td>`;
+                html += `<td class="task-amount" style="color:var(--success);">${fmt(task.amount)} ₽</td>`;
+                html += `<td style="color:var(--success);font-size:0.82rem;">${fmtDate(task.paidDate) || '—'}</td>`;
+                html += `<td><div style="display:flex;gap:0.25rem;">`;
+                html += `<button class="icon-btn" onclick="toggleTaskPaid(${task.id})" title="Вернуть в активные">${UNDO_ICO}</button>`;
+                html += `<button class="icon-btn" onclick="deleteTask(${task.id})" title="Удалить">${DEL_ICO}</button>`;
+                html += `</div></td></tr>`;
+            }
+            histTbody.innerHTML = html;
+        }
+
+        // ── History tab — Mobile ──
+        const histMobile = document.getElementById('historyMobileContainer');
+        if (histMobile) {
+            if (historyTasks.length === 0) {
+                histMobile.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted);">История пуста</div>';
+            } else {
+                let mobileHtml = '';
+                for (const task of historyTasks) {
+                    mobileHtml += `<div class="task-card paid">`;
+                    mobileHtml += `<div class="task-card-header">`;
+                    mobileHtml += `<div class="task-card-checkbox paid" onclick="toggleTaskPaid(${task.id})" title="Вернуть">${CHECK_ICO}</div>`;
+                    mobileHtml += `<div class="task-card-main">`;
+                    mobileHtml += `<div class="task-card-name">${task.name}</div>`;
+                    if (task.description) mobileHtml += `<div class="task-card-desc">${task.description}</div>`;
+                    mobileHtml += `<div class="task-card-amount" style="color:var(--success);">${fmt(task.amount)} ₽</div>`;
+                    mobileHtml += `</div></div>`;
+                    mobileHtml += `<div class="task-card-actions">`;
+                    mobileHtml += `<button class="icon-btn" onclick="toggleTaskPaid(${task.id})" title="Вернуть">${UNDO_ICO}</button>`;
+                    mobileHtml += `<button class="icon-btn" onclick="deleteTask(${task.id})">${DEL_ICO}</button>`;
+                    mobileHtml += `</div>`;
+                    mobileHtml += `<div class="task-card-footer"><span class="task-card-paid-date">Оплачено: ${fmtDate(task.paidDate) || '—'}</span></div>`;
+                    mobileHtml += `</div>`;
+                }
+                histMobile.innerHTML = mobileHtml;
+            }
         }
     }
 
-    // ── Stats & Chart ──
+    // ── Stats & Chart — считаем только НЕОПЛАЧЕННЫЕ задачи ──
     function updateStats() {
-        let totalAmt = 0, totalTasks = 0, paidTasks = 0, paidAmt = 0;
+        let totalAmt = 0, activeTasks = 0, paidTasks = 0, paidAmt = 0;
         for (const proj of projects) {
             for (const t of proj.tasks) {
-                totalAmt += t.amount; totalTasks++;
-                if (t.paid) { paidTasks++; paidAmt += t.amount; }
+                if (!t.paid) {
+                    totalAmt += t.amount;
+                    activeTasks++;
+                } else {
+                    paidTasks++;
+                    paidAmt += t.amount;
+                }
             }
         }
-        const tax = totalAmt * 0.06, net = totalAmt - tax;
+        const tax = Math.ceil(totalAmt * (0.06 / 0.94) * 100) / 100, net = totalAmt + tax;
         document.getElementById('statTotalProjects').textContent = projects.length;
         document.getElementById('statTotalAmount').textContent   = fmt(totalAmt) + ' ₽';
         document.getElementById('statTax').textContent           = 'Налог: ' + fmt(tax) + ' ₽';
         document.getElementById('statNetAmount').textContent     = fmt(net) + ' ₽';
-        document.getElementById('statPaidTasks').textContent     = paidTasks + ' / ' + totalTasks;
-        document.getElementById('statPaidAmount').textContent    = fmt(paidAmt) + ' ₽';
+        document.getElementById('statPaidTasks').textContent     = paidTasks + ' выполнено';
+        document.getElementById('statPaidAmount').textContent    = fmt(paidAmt) + ' ₽ получено';
         renderChart();
     }
 
@@ -1252,7 +1452,7 @@
         let total = 0;
         for (const proj of projects.slice(0, 12)) {
             let s = 0;
-            for (const t of proj.tasks) s += t.amount;
+            for (const t of proj.tasks) if (!t.paid) s += t.amount;
             labels.push(proj.name); data.push(s); colors.push(getColor(proj.name)); total += s;
         }
 
@@ -1305,26 +1505,28 @@
     // ── Actions ──
     function openProject(id) {
         currentProjectId = id;
+        currentTab = 'active';
+        switchTab('active');
         renderProjectView(id);
         showProjectView();
     }
 
-    function deleteProject(id) {
+    async function deleteProject(id) {
         if (!confirm('Удалить проект со всеми задачами?')) return;
         projects = projects.filter(p => p.id !== id);
-        saveProjects(); renderProjects(); updateStats();
+        await saveProjects(); renderProjects(); updateStats();
     }
 
-    function deleteTask(taskId) {
+    async function deleteTask(taskId) {
         if (!confirm('Удалить задачу?')) return;
         const proj = projects.find(p => p.id === currentProjectId);
         if (proj) {
             proj.tasks = proj.tasks.filter(t => t.id !== taskId);
-            saveProjects(); renderProjectView(currentProjectId); updateStats();
+            await saveProjects(); renderProjectView(currentProjectId); updateStats();
         }
     }
 
-    function toggleTaskPaid(taskId) {
+    async function toggleTaskPaid(taskId) {
         const proj = projects.find(p => p.id === currentProjectId);
         if (proj) {
             const task = proj.tasks.find(t => t.id === taskId);
@@ -1332,9 +1534,12 @@
                 task.paid = !task.paid;
                 if (task.paid && !task.paidDate) task.paidDate = new Date().toISOString().split('T')[0];
                 if (!task.paid) task.paidDate = '';
-                saveProjects();
+                await saveProjects();
                 renderProjectView(currentProjectId);
                 updateStats();
+                // Автоматически переключаем вкладку
+                if (task.paid) switchTab('history');
+                else switchTab('active');
             }
         }
     }
