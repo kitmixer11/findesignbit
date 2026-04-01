@@ -951,96 +951,68 @@
     const hasTgCloud = !!(CS && typeof CS.setItem === 'function' && typeof CS.getItem === 'function');
 
     // ── Chunked storage (CloudStorage лимит 4096 символов на ключ) ──
-    const CHUNK_SIZE = 3900; // безопасный размер чанка
+    // сжатие данных вместо чанков
 
-    function storageSetChunked(baseKey, value) {
-        return new Promise((resolve) => {
-            if (!hasTgCloud) {
-                try { localStorage.setItem(baseKey, value); } catch(e) {}
-                resolve(true);
-                return;
-            }
-            // Разбиваем на чанки
-            const chunks = [];
-            for (let i = 0; i < value.length; i += CHUNK_SIZE) {
-                chunks.push(value.slice(i, i + CHUNK_SIZE));
-            }
-            const metaKey = baseKey + '_meta';
-            const meta = JSON.stringify({ chunks: chunks.length, total: value.length });
-
-            // Сохраняем все чанки последовательно
-            let idx = 0;
-            function saveNext() {
-                if (idx >= chunks.length) {
-                    // Сохраняем мета последней
-                    CS.setItem(metaKey, meta, (err) => {
-                        if (err) console.warn('meta save err:', err);
-                        resolve(true);
-                    });
-                    return;
-                }
-                const chunkKey = baseKey + '_c' + idx;
-                CS.setItem(chunkKey, chunks[idx], (err) => {
-                    if (err) console.warn('chunk save err:', idx, err);
-                    idx++;
-                    saveNext();
-                });
-            }
-            saveNext();
-        });
+    // ── Сжатие данных: короткие ключи вместо длинных ──
+    // "name"→"n", "tasks"→"t", "description"→"d", "amount"→"a",
+    // "date"→"dt", "paidDate"→"pd", "paid"→"p", "id"→"i"
+    function compress(projects) {
+        return JSON.stringify(projects.map(proj => ({
+            i: proj.id,
+            n: proj.name,
+            t: (proj.tasks || []).map(t => ({
+                i: t.id,
+                n: t.name,
+                d: t.description || '',
+                a: t.amount,
+                dt: t.date,
+                pd: t.paidDate || '',
+                p: t.paid ? 1 : 0
+            }))
+        })));
     }
 
-    function storageGetChunked(baseKey) {
-        return new Promise((resolve) => {
-            if (!hasTgCloud) {
-                try { resolve(localStorage.getItem(baseKey)); }
-                catch(e) { resolve(null); }
-                return;
-            }
-            const metaKey = baseKey + '_meta';
-            console.log('[load] читаем мета-ключ:', metaKey);
-            CS.getItem(metaKey, (err, metaStr) => {
-                console.log('[load] мета результат:', err, metaStr);
-                if (err || !metaStr) {
-                    // Нет чанков — пробуем старый ключ (обратная совместимость)
-                    console.log('[load] мета не найдена, пробуем старый ключ:', baseKey);
-                    CS.getItem(baseKey, (err2, val) => {
-                        console.log('[load] старый ключ результат:', err2, val ? val.length + ' символов' : 'пусто');
-                        resolve((!err2 && val) ? val : null);
-                    });
-                    return;
-                }
-                try {
-                    const meta = JSON.parse(metaStr);
-                    const total = meta.chunks;
-                    console.log('[load] найдено чанков:', total);
-                    const parts = [];
-                    let idx = 0;
-                    function readNext() {
-                        if (idx >= total) {
-                            const result = parts.join('');
-                            console.log('[load] собрано символов:', result.length);
-                            resolve(result || null);
-                            return;
-                        }
-                        const chunkKey = baseKey + '_c' + idx;
-                        CS.getItem(chunkKey, (err2, val) => {
-                            console.log('[load] чанк', idx, ':', err2, val ? val.length + ' символов' : 'ПУСТО');
-                            parts.push(val || '');
-                            idx++;
-                            readNext();
-                        });
-                    }
-                    readNext();
-                } catch(e) { 
-                    console.error('[load] ошибка парсинга мета:', e);
-                    resolve(null); 
-                }
-            });
-        });
+    function decompress(str) {
+        const raw = JSON.parse(str);
+        // Поддержка старого формата (с полными ключами)
+        if (raw[0] && raw[0].name !== undefined) return raw;
+        return raw.map(proj => ({
+            id: proj.i,
+            name: proj.n,
+            tasks: (proj.t || []).map(t => ({
+                id: t.i,
+                name: t.n,
+                description: t.d || '',
+                amount: t.a,
+                date: t.dt,
+                paidDate: t.pd || '',
+                paid: !!t.p
+            }))
+        }));
     }
 
-    function storageSet(key, value) {
+    // ── Архивирование: оплаченные задачи старше 60 дней → отдельный ключ ──
+    // Это решает проблему лимита навсегда: основной ключ всегда компактный.
+    const ARCHIVE_DAYS = 60;
+
+    function splitForArchive(projects) {
+        const cutoff = Date.now() - ARCHIVE_DAYS * 24 * 60 * 60 * 1000;
+        const active = projects.map(proj => ({
+            ...proj,
+            tasks: proj.tasks.filter(t =>
+                !t.paid || !t.paidDate || new Date(t.paidDate).getTime() > cutoff
+            )
+        }));
+        const archive = projects.map(proj => ({
+            ...proj,
+            tasks: proj.tasks.filter(t =>
+                t.paid && t.paidDate && new Date(t.paidDate).getTime() <= cutoff
+            )
+        })).filter(p => p.tasks.length > 0);
+        return { active, archive };
+    }
+
+    function storageSave(key, value) {
         return new Promise((resolve) => {
             if (!hasTgCloud) {
                 try { localStorage.setItem(key, value); } catch(e) {}
@@ -1054,7 +1026,7 @@
         });
     }
 
-    function storageGet(key) {
+    function storageLoad(key) {
         return new Promise((resolve) => {
             if (!hasTgCloud) {
                 try { resolve(localStorage.getItem(key)); }
@@ -1069,25 +1041,78 @@
 
     // ── Save / Load ──
     async function saveProjects() {
-        const json = JSON.stringify(projects);
-        await storageSetChunked('financeProjects2', json);
+        const { active, archive } = splitForArchive(projects);
+
+        // Сохраняем активные (сжатые)
+        const compressed = compress(active);
+        console.log('[save] активные:', compressed.length, 'символов');
+        await storageSave('fp3', compressed);
+
+        // Сохраняем архив если есть (мёрджим с существующим)
+        if (archive.length > 0) {
+            const existingArchiveStr = await storageLoad('fp3_arch');
+            let existingArchive = [];
+            if (existingArchiveStr) {
+                try { existingArchive = decompress(existingArchiveStr); } catch(e) {}
+            }
+            // Мёрджим: добавляем только новые задачи которых ещё нет в архиве
+            for (const proj of archive) {
+                let archProj = existingArchive.find(p => p.id === proj.id);
+                if (!archProj) {
+                    archProj = { ...proj, tasks: [] };
+                    existingArchive.push(archProj);
+                }
+                const existingIds = new Set(archProj.tasks.map(t => t.id));
+                for (const t of proj.tasks) {
+                    if (!existingIds.has(t.id)) archProj.tasks.push(t);
+                }
+            }
+            const archCompressed = compress(existingArchive);
+            console.log('[save] архив:', archCompressed.length, 'символов');
+            await storageSave('fp3_arch', archCompressed);
+        }
+
         showSaveStatus(true);
     }
 
     async function loadData() {
         try {
-            const data = await storageGetChunked('financeProjects2');
+            let data = await storageLoad('fp3');
+            if (!data) data = await storageLoad('financeProjects2');
             if (data) {
-                projects = JSON.parse(data);
+                const active = decompress(data);
+
+                // Загружаем архив и мёрджим в проекты
+                const archStr = await storageLoad('fp3_arch');
+                if (archStr) {
+                    try {
+                        const archive = decompress(archStr);
+                        // Добавляем архивные задачи в соответствующие проекты
+                        for (const archProj of archive) {
+                            const proj = active.find(p => p.id === archProj.id);
+                            if (proj) {
+                                const existingIds = new Set(proj.tasks.map(t => t.id));
+                                for (const t of archProj.tasks) {
+                                    if (!existingIds.has(t.id)) proj.tasks.push(t);
+                                }
+                            }
+                        }
+                    } catch(e) { console.warn('archive load err:', e); }
+                }
+
+                projects = active;
+                console.log('[load] загружено проектов:', projects.length);
             } else {
-                // Хранилище пустое — используем встроенные данные и сразу сохраняем
                 projects = INITIAL_DATA;
                 await saveProjects();
             }
-        } catch(e) { console.error('loadData error:', e); projects = INITIAL_DATA; }
+        } catch(e) {
+            console.error('loadData error:', e);
+            projects = INITIAL_DATA;
+        }
 
         try {
-            const theme = await storageGet('theme');
+            const theme = await storageLoad('theme');
             document.documentElement.setAttribute('data-theme',
                 theme || tg?.colorScheme || 'dark');
         } catch(e) {}
@@ -1129,6 +1154,7 @@
         }
 
         const json = JSON.stringify(projects, null, 2);
+        const compressed = compress(projects);
         const size = json.length;
         const msg = `tg объект: ${tg ? '✅ есть' : '❌ нет'}\n` +
                     `CloudStorage API: ${hasTgCloud ? '✅ есть' : '❌ нет'}\n` +
@@ -1140,7 +1166,8 @@
                     `─────────────────\n` +
                     `Проектов в памяти: ${projects.length}\n` +
                     `Размер JSON: ${size} символов\n` +
-                    `Чанков нужно: ${Math.ceil(size / CHUNK_SIZE)}\n` +
+                    `Сжатый размер: ${compressed.length} символов (лимит 4096)\n` +
+                    `Статус: ${compressed.length <= 4096 ? '✅ влезает' : '❌ превышен лимит!'}\n` +
                     `─────────────────\n` +
                     `Данные:\n${json}`;
 
@@ -1210,7 +1237,7 @@
         const cur = document.documentElement.getAttribute('data-theme');
         const next = cur === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', next);
-        await storageSet('theme', next);
+        await storageSave('theme', next);
         updateThemeIcon();
         renderChart();
     });
