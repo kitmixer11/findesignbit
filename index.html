@@ -998,10 +998,14 @@
                 return;
             }
             const metaKey = baseKey + '_meta';
+            console.log('[load] читаем мета-ключ:', metaKey);
             CS.getItem(metaKey, (err, metaStr) => {
+                console.log('[load] мета результат:', err, metaStr);
                 if (err || !metaStr) {
                     // Нет чанков — пробуем старый ключ (обратная совместимость)
+                    console.log('[load] мета не найдена, пробуем старый ключ:', baseKey);
                     CS.getItem(baseKey, (err2, val) => {
+                        console.log('[load] старый ключ результат:', err2, val ? val.length + ' символов' : 'пусто');
                         resolve((!err2 && val) ? val : null);
                     });
                     return;
@@ -1009,22 +1013,29 @@
                 try {
                     const meta = JSON.parse(metaStr);
                     const total = meta.chunks;
-                    // Читаем чанки по одному последовательно
+                    console.log('[load] найдено чанков:', total);
                     const parts = [];
                     let idx = 0;
                     function readNext() {
                         if (idx >= total) {
-                            resolve(parts.join('') || null);
+                            const result = parts.join('');
+                            console.log('[load] собрано символов:', result.length);
+                            resolve(result || null);
                             return;
                         }
-                        CS.getItem(baseKey + '_c' + idx, (err2, val) => {
+                        const chunkKey = baseKey + '_c' + idx;
+                        CS.getItem(chunkKey, (err2, val) => {
+                            console.log('[load] чанк', idx, ':', err2, val ? val.length + ' символов' : 'ПУСТО');
                             parts.push(val || '');
                             idx++;
                             readNext();
                         });
                     }
                     readNext();
-                } catch(e) { resolve(null); }
+                } catch(e) { 
+                    console.error('[load] ошибка парсинга мета:', e);
+                    resolve(null); 
+                }
             });
         });
     }
@@ -1103,7 +1114,18 @@
                 });
             });
         } else {
-            csTest = '❌ CloudStorage недоступен (tg.CloudStorage не найден)';
+            csTest = '❌ CloudStorage недоступен';
+        }
+
+        // Получаем все ключи
+        let keysInfo = 'недоступно';
+        if (hasTgCloud) {
+            keysInfo = await new Promise(resolve => {
+                CS.getKeys((err, keys) => {
+                    if (err) resolve('❌ ошибка: ' + err);
+                    else resolve(keys && keys.length ? keys.join(', ') : '(пусто)');
+                });
+            });
         }
 
         const json = JSON.stringify(projects, null, 2);
@@ -1113,6 +1135,8 @@
                     `Тест записи/чтения: ${csTest}\n` +
                     `Версия TG: ${tg?.version || 'неизвестно'}\n` +
                     `Платформа: ${tg?.platform || 'неизвестно'}\n` +
+                    `─────────────────\n` +
+                    `Ключи в CloudStorage:\n${keysInfo}\n` +
                     `─────────────────\n` +
                     `Проектов в памяти: ${projects.length}\n` +
                     `Размер JSON: ${size} символов\n` +
@@ -1651,4 +1675,3 @@
 </script>
 </body>
 </html>
-
