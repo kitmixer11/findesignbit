@@ -720,7 +720,7 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
                 </svg>
             </button>
-            <button class="theme-toggle" onclick="showDebugInfo()" title="Диагностика / Экспорт данных" style="font-size:14px;">🔧</button>
+
             <button class="btn btn-primary" id="newProjectBtn">+ Проект</button>
             <button class="btn btn-primary" id="newTaskBtnHeader" style="display:none;">+ Задача</button>
         </div>
@@ -1121,89 +1121,6 @@
         updateThemeIcon();
         renderProjects();
         updateStats();
-    }
-
-    // ── Debug: показать что в хранилище ──
-    async function showDebugInfo() {
-        // Тест записи/чтения CloudStorage прямо сейчас
-        let csTest = 'не проверялось';
-        if (hasTgCloud) {
-            csTest = await new Promise(resolve => {
-                CS.setItem('_test', 'ok', (err) => {
-                    if (err) { resolve('❌ setItem ошибка: ' + err); return; }
-                    CS.getItem('_test', (err2, val) => {
-                        if (err2) resolve('❌ getItem ошибка: ' + err2);
-                        else if (val === 'ok') resolve('✅ работает');
-                        else resolve('⚠️ прочитано: ' + val);
-                    });
-                });
-            });
-        } else {
-            csTest = '❌ CloudStorage недоступен';
-        }
-
-        // Получаем все ключи
-        let keysInfo = 'недоступно';
-        if (hasTgCloud) {
-            keysInfo = await new Promise(resolve => {
-                CS.getKeys((err, keys) => {
-                    if (err) resolve('❌ ошибка: ' + err);
-                    else resolve(keys && keys.length ? keys.join(', ') : '(пусто)');
-                });
-            });
-        }
-
-        const json = JSON.stringify(projects, null, 2);
-        const compressed = compress(projects);
-        const size = json.length;
-        const msg = `tg объект: ${tg ? '✅ есть' : '❌ нет'}\n` +
-                    `CloudStorage API: ${hasTgCloud ? '✅ есть' : '❌ нет'}\n` +
-                    `Тест записи/чтения: ${csTest}\n` +
-                    `Версия TG: ${tg?.version || 'неизвестно'}\n` +
-                    `Платформа: ${tg?.platform || 'неизвестно'}\n` +
-                    `─────────────────\n` +
-                    `Ключи в CloudStorage:\n${keysInfo}\n` +
-                    `─────────────────\n` +
-                    `Проектов в памяти: ${projects.length}\n` +
-                    `Размер JSON: ${size} символов\n` +
-                    `Сжатый размер: ${compressed.length} символов (лимит 4096)\n` +
-                    `Статус: ${compressed.length <= 4096 ? '✅ влезает' : '❌ превышен лимит!'}\n` +
-                    `─────────────────\n` +
-                    `Данные:\n${json}`;
-
-        const modal = document.createElement('div');
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
-        modal.innerHTML = `
-            <div style="background:var(--bg-secondary);border-radius:14px;padding:1.25rem;max-width:500px;width:100%;max-height:85vh;overflow-y:auto;border:1px solid var(--border);">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                    <strong>🔧 Диагностика хранилища</strong>
-                    <button onclick="this.closest('[style*=fixed]').remove()" style="border:none;background:transparent;color:var(--text-muted);font-size:1.2rem;cursor:pointer;">✕</button>
-                </div>
-                <textarea readonly style="width:100%;height:260px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:0.75rem;color:var(--text-primary);font-size:0.75rem;font-family:monospace;resize:none;">${msg}</textarea>
-                <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap;">
-                    <button onclick="navigator.clipboard.writeText(${JSON.stringify(json)}).then(()=>alert('Скопировано!'))" style="flex:1;min-width:140px;padding:0.6rem;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;">📋 Скопировать данные</button>
-                    <button onclick="importData()" style="flex:1;min-width:140px;padding:0.6rem;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;cursor:pointer;color:var(--text-primary);font-weight:600;">📥 Импорт данных</button>
-                </div>
-                <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;margin-top:0.5rem;padding:0.5rem;background:transparent;border:1px solid var(--border);border-radius:8px;cursor:pointer;color:var(--text-muted);">Закрыть</button>
-            </div>`;
-        document.body.appendChild(modal);
-    }
-
-    // ── Импорт данных ──
-    function importData() {
-        const json = prompt('Вставь JSON с данными:');
-        if (!json) return;
-        try {
-            const parsed = JSON.parse(json);
-            if (!Array.isArray(parsed)) { alert('Неверный формат — должен быть массив'); return; }
-            projects = parsed;
-            saveProjects();
-            renderProjects();
-            updateStats();
-            alert('✅ Данные импортированы: ' + projects.length + ' проектов');
-        } catch(e) {
-            alert('❌ Ошибка парсинга JSON: ' + e.message);
-        }
     }
 
     // ── Save status ──
@@ -1702,3 +1619,4 @@
 </script>
 </body>
 </html>
+
