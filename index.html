@@ -939,6 +939,9 @@
     }
 
     // ── State ──
+    // Начальные данные — используются если хранилище пустое
+    const INITIAL_DATA = [{"id":1771684538488,"name":"ВТБ","tasks":[{"id":1771685039000,"name":"Открытка","description":"Открытка в стиле Whatsapp","amount":10000,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685068460,"name":"Правки открытка","description":"Правки открытка, другой стиль","amount":3500,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685187091,"name":"23 Февраля","description":"2 открытки в стиле Whatsapp к 23 февраля","amount":15000,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685302633,"name":"2 имиджа самолет","description":"2 картинки, из салона самолета","amount":10000,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685432143,"name":"3д пост","description":"сделать 3д визуализацию с картой, маркетом, и цифрами","amount":7500,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685576172,"name":"Открытка с сердцем","description":"Сделать имидж с открыткой, с сердцем","amount":7500,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685680406,"name":"Панды","description":"Генерация с пандами","amount":6000,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685789390,"name":"ресайз панд","description":"сделать 2 ресайза по имиджам с пандами","amount":2000,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685834024,"name":"еще ресайз с пандами","description":"сделать ресайз еще один","amount":2000,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771685894736,"name":"пост проценты ставка","description":"сделать пост про ставку в годовых","amount":10000,"date":"2026-02-21","paidDate":"2026-03-16","paid":true},{"id":1771927137747,"name":"Безопасность от мошенников","description":"сделать одну визуализацию с телефоном","amount":7500,"date":"2026-02-24","paidDate":"2026-03-16","paid":true},{"id":1771945866729,"name":"Анимация 15% ставка","description":"","amount":3500,"date":"2026-02-24","paidDate":"2026-03-16","paid":true},{"id":1772005814953,"name":"3 открытки 8 марта","description":"сделать 3 тематические открытки на 8 марта","amount":25500,"date":"2026-02-25","paidDate":"2026-03-16","paid":true},{"id":1772439641073,"name":"9 карточек и анимация","description":"сделать для втб 9 карточек, одна из которых это анимация","amount":20000,"date":"2026-03-02","paidDate":"2026-03-16","paid":true},{"id":1772531482197,"name":"Правки 9 карточек","description":"переделка дизайна","amount":7500,"date":"2026-03-03","paidDate":"2026-03-31","paid":true},{"id":1773670540906,"name":"Поправить имидж","description":"перегенерация имиджа","amount":4500,"date":"2026-03-16","paidDate":"","paid":false},{"id":1773845846825,"name":"Стикер подарок","description":"помочь поправить стикер бокса с запиской","amount":2500,"date":"2026-03-18","paidDate":"","paid":false},{"id":1773866297394,"name":"Анимация 3д имиджа","description":"анимировать 3д имидж и ресайзы видосов плюс заголовок","amount":10000,"date":"2026-03-18","paidDate":"","paid":false},{"id":1775026619999,"name":"11","description":"","amount":11,"date":"2026-04-01","paidDate":"","paid":false}]},{"id":1771684724074,"name":"Rostic's","tasks":[{"id":1771684894678,"name":"Ai Имиджи","description":"Разработка серии имиджей к 14 февраля","amount":40810,"date":"2026-02-14","paidDate":"2026-03-15","paid":true}]}];
+
     let projects = [];
     let currentProjectId = null;
     let editingTaskId = null;
@@ -1005,12 +1008,22 @@
                 }
                 try {
                     const meta = JSON.parse(metaStr);
-                    const keys = Array.from({length: meta.chunks}, (_, i) => baseKey + '_c' + i);
-                    CS.getItems(keys, (err2, items) => {
-                        if (err2 || !items) { resolve(null); return; }
-                        const full = keys.map(k => items[k] || '').join('');
-                        resolve(full || null);
-                    });
+                    const total = meta.chunks;
+                    // Читаем чанки по одному последовательно
+                    const parts = [];
+                    let idx = 0;
+                    function readNext() {
+                        if (idx >= total) {
+                            resolve(parts.join('') || null);
+                            return;
+                        }
+                        CS.getItem(baseKey + '_c' + idx, (err2, val) => {
+                            parts.push(val || '');
+                            idx++;
+                            readNext();
+                        });
+                    }
+                    readNext();
                 } catch(e) { resolve(null); }
             });
         });
@@ -1053,8 +1066,14 @@
     async function loadData() {
         try {
             const data = await storageGetChunked('financeProjects2');
-            if (data) projects = JSON.parse(data);
-        } catch(e) { console.error('loadData error:', e); }
+            if (data) {
+                projects = JSON.parse(data);
+            } else {
+                // Хранилище пустое — используем встроенные данные и сразу сохраняем
+                projects = INITIAL_DATA;
+                await saveProjects();
+            }
+        } catch(e) { console.error('loadData error:', e); projects = INITIAL_DATA; }
 
         try {
             const theme = await storageGet('theme');
@@ -1632,3 +1651,4 @@
 </script>
 </body>
 </html>
+
