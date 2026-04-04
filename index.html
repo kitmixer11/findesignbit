@@ -1009,8 +1009,8 @@
                 return;
             }
             CS.setItem(key, value, (err) => {
-                if (err) console.warn('CS.setItem err:', key, err);
-                resolve(true);
+                if (err) dbg('CS.setItem ERR key=' + key + ': ' + JSON.stringify(err));
+                resolve(!err);
             });
         });
     }
@@ -1028,12 +1028,64 @@
         });
     }
 
+    function storageDelete(key) {
+        return new Promise((resolve) => {
+            if (!hasTgCloud) {
+                try { localStorage.removeItem(key); } catch(e) {}
+                resolve(); return;
+            }
+            CS.removeItem(key, () => resolve());
+        });
+    }
+
+    // ── Chunked save/load (лимит CloudStorage = 4096 байт на ключ) ──
+    // Делим строку на куски по 1800 символов — с запасом для кириллицы (2 байта/символ)
+    const CHUNK_SIZE = 1800;
+    const CHUNK_KEY  = 'fp5';
+
+    async function saveChunked(data) {
+        const chunks = [];
+        for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            chunks.push(data.slice(i, i + CHUNK_SIZE));
+        }
+        dbg('Сохраняю ' + chunks.length + ' чанков, всего ' + data.length + ' симв');
+        // Сохраняем мета-ключ с количеством чанков
+        const ok = await storageSave(CHUNK_KEY + '_n', String(chunks.length));
+        if (!ok) { dbg('❌ Не удалось сохранить мета-ключ!'); return false; }
+        for (let i = 0; i < chunks.length; i++) {
+            const r = await storageSave(CHUNK_KEY + '_' + i, chunks[i]);
+            if (!r) { dbg('❌ Ошибка записи чанка ' + i); return false; }
+            dbg('  чанк ' + i + ': ' + chunks[i].length + ' симв ✅');
+        }
+        // Удаляем лишние старые чанки если их было больше
+        for (let i = chunks.length; i < chunks.length + 5; i++) {
+            await storageDelete(CHUNK_KEY + '_' + i);
+        }
+        return true;
+    }
+
+    async function loadChunked() {
+        const nStr = await storageLoad(CHUNK_KEY + '_n');
+        if (!nStr) return null;
+        const n = parseInt(nStr);
+        if (isNaN(n) || n < 1) return null;
+        dbg('Загружаю ' + n + ' чанков...');
+        let result = '';
+        for (let i = 0; i < n; i++) {
+            const chunk = await storageLoad(CHUNK_KEY + '_' + i);
+            if (!chunk) { dbg('❌ Чанк ' + i + ' пустой!'); return null; }
+            result += chunk;
+        }
+        dbg('Загружено ' + result.length + ' симв');
+        return result;
+    }
+
     // ── Debug log ──
     const debugLines = [];
     function dbg(msg) {
         const t = new Date().toLocaleTimeString('ru-RU');
         debugLines.unshift('[' + t + '] ' + msg);
-        if (debugLines.length > 40) debugLines.pop();
+        if (debugLines.length > 60) debugLines.pop();
         const el = document.getElementById('debugLog');
         if (el) el.textContent = debugLines.join('\n');
         console.log(msg);
@@ -1042,30 +1094,39 @@
     // ── Save / Load ──
     async function saveProjects() {
         const compressed = compress(projects);
-        dbg('SAVE: ' + projects.length + ' проектов, ' + compressed.length + ' симв, tgCloud=' + hasTgCloud);
-        await storageSave('fp4', compressed);
-        // Верификация — сразу читаем обратно
-        const verify = await storageLoad('fp4');
-        if (verify && verify.length > 0) {
-            dbg('✅ Верификация OK (' + verify.length + ' симв)');
-            showSaveStatus(true);
+        dbg('SAVE: ' + projects.length + ' проектов, ' + compressed.length + ' симв');
+        const ok = await saveChunked(compressed);
+        if (ok) {
+            // Верификация
+            const verify = await loadChunked();
+            if (verify && verify.length === compressed.length) {
+                dbg('✅ Сохранено и верифицировано!');
+                showSaveStatus(true);
+            } else {
+                dbg('❌ Верификация провалена! verify=' + (verify ? verify.length : 'null'));
+                showSaveStatus(false);
+            }
         } else {
-            dbg('❌ Верификация ПРОВАЛЕНА! Данные не записались');
+            dbg('❌ Ошибка сохранения');
             showSaveStatus(false);
         }
     }
 
     async function loadData() {
         try {
-            // Пробуем новый ключ, потом старые (миграция)
-            let data = await storageLoad('fp4');
+            // Сначала пробуем чанкованный формат (fp5)
+            let data = await loadChunked();
+            // Fallback на старые ключи
+            if (!data) data = await storageLoad('fp4');
             if (!data) data = await storageLoad('fp3');
             if (!data) data = await storageLoad('financeProjects2');
+
             if (data) {
                 projects = decompress(data);
-                console.log('[load] загружено проектов:', projects.length);
-                // Если загружено из старого ключа — сохраняем в новый
-                if (!(await storageLoad('fp4'))) {
+                dbg('[load] загружено проектов: ' + projects.length);
+                // Если загружено из старого ключа — мигрируем в чанки
+                if (!(await storageLoad(CHUNK_KEY + '_n'))) {
+                    dbg('Мигрирую в чанкованный формат...');
                     await saveProjects();
                 }
             } else {
@@ -1073,7 +1134,7 @@
                 await saveProjects();
             }
         } catch(e) {
-            console.error('loadData error:', e);
+            dbg('loadData error: ' + e);
             projects = INITIAL_DATA;
         }
 
@@ -1127,20 +1188,26 @@
         dbg('--- ДИАГНОСТИКА ---');
         dbg('tg: ' + (tg ? 'есть' : 'НЕТ'));
         dbg('tg.version: ' + (tg?.version || '?'));
-        dbg('CloudStorage: ' + (tg?.CloudStorage ? 'есть' : 'НЕТ'));
         dbg('hasTgCloud: ' + hasTgCloud);
 
-        // Тест записи
-        dbg('Тест: пишу тестовый ключ...');
+        // Тест записи/чтения
+        dbg('Тест записи...');
         await storageSave('_test', 'hello123');
         const testRead = await storageLoad('_test');
-        dbg('Тест чтения: ' + (testRead === 'hello123' ? '✅ OK' : '❌ ОШИБКА, получено: ' + testRead));
+        dbg('Тест: ' + (testRead === 'hello123' ? '✅ OK' : '❌ ОШИБКА: ' + testRead));
 
-        // Проверяем основной ключ
+        // Проверяем чанки
+        const nStr = await storageLoad(CHUNK_KEY + '_n');
+        dbg('fp5_n (чанков): ' + (nStr || 'ПУСТО'));
+        if (nStr) {
+            for (let i = 0; i < parseInt(nStr); i++) {
+                const c = await storageLoad(CHUNK_KEY + '_' + i);
+                dbg('  fp5_' + i + ': ' + (c ? c.length + ' симв' : 'ПУСТО'));
+            }
+        }
+        // Старые ключи
         const fp4 = await storageLoad('fp4');
-        dbg('fp4: ' + (fp4 ? fp4.length + ' симв' : 'ПУСТО'));
-        const fp3 = await storageLoad('fp3');
-        dbg('fp3 (старый): ' + (fp3 ? fp3.length + ' симв' : 'ПУСТО'));
+        dbg('fp4 (старый): ' + (fp4 ? fp4.length + ' симв' : 'ПУСТО'));
 
         dbg('projects в памяти: ' + projects.length);
         dbg('--- КОНЕЦ ---');
