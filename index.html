@@ -723,8 +723,18 @@
 
             <button class="btn btn-primary" id="newProjectBtn">+ Проект</button>
             <button class="btn btn-primary" id="newTaskBtnHeader" style="display:none;">+ Задача</button>
+            <button class="btn btn-secondary btn-small" id="debugBtn" title="Дебаг" onclick="toggleDebug()" style="font-size:0.75rem;padding:0.4rem 0.7rem;">🐛</button>
         </div>
     </header>
+
+    <!-- Debug Panel -->
+    <div id="debugPanel" style="display:none;background:#0a0e17;border:1px solid #3b82f6;border-radius:10px;padding:1rem;margin-bottom:1rem;font-size:0.72rem;font-family:monospace;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+            <strong style="color:#3b82f6;">🐛 Диагностика хранилища</strong>
+            <button onclick="runDiagnostic()" style="background:#3b82f6;color:white;border:none;border-radius:6px;padding:0.3rem 0.7rem;cursor:pointer;font-size:0.72rem;">▶ Проверить</button>
+        </div>
+        <pre id="debugLog" style="color:#a8adb7;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;margin:0;"></pre>
+    </div>
 
     <!-- Main View -->
     <div id="mainView">
@@ -1018,12 +1028,31 @@
         });
     }
 
+    // ── Debug log ──
+    const debugLines = [];
+    function dbg(msg) {
+        const t = new Date().toLocaleTimeString('ru-RU');
+        debugLines.unshift('[' + t + '] ' + msg);
+        if (debugLines.length > 40) debugLines.pop();
+        const el = document.getElementById('debugLog');
+        if (el) el.textContent = debugLines.join('\n');
+        console.log(msg);
+    }
+
     // ── Save / Load ──
     async function saveProjects() {
         const compressed = compress(projects);
-        console.log('[save] размер:', compressed.length, 'символов');
+        dbg('SAVE: ' + projects.length + ' проектов, ' + compressed.length + ' симв, tgCloud=' + hasTgCloud);
         await storageSave('fp4', compressed);
-        showSaveStatus(true);
+        // Верификация — сразу читаем обратно
+        const verify = await storageLoad('fp4');
+        if (verify && verify.length > 0) {
+            dbg('✅ Верификация OK (' + verify.length + ' симв)');
+            showSaveStatus(true);
+        } else {
+            dbg('❌ Верификация ПРОВАЛЕНА! Данные не записались');
+            showSaveStatus(false);
+        }
     }
 
     async function loadData() {
@@ -1085,6 +1114,36 @@
         document.getElementById('themeToggle').innerHTML = isDark
             ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
             : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+
+    // ── Debug helpers ──
+    function toggleDebug() {
+        const p = document.getElementById('debugPanel');
+        p.style.display = p.style.display === 'none' ? 'block' : 'none';
+        if (p.style.display === 'block') runDiagnostic();
+    }
+
+    async function runDiagnostic() {
+        dbg('--- ДИАГНОСТИКА ---');
+        dbg('tg: ' + (tg ? 'есть' : 'НЕТ'));
+        dbg('tg.version: ' + (tg?.version || '?'));
+        dbg('CloudStorage: ' + (tg?.CloudStorage ? 'есть' : 'НЕТ'));
+        dbg('hasTgCloud: ' + hasTgCloud);
+
+        // Тест записи
+        dbg('Тест: пишу тестовый ключ...');
+        await storageSave('_test', 'hello123');
+        const testRead = await storageLoad('_test');
+        dbg('Тест чтения: ' + (testRead === 'hello123' ? '✅ OK' : '❌ ОШИБКА, получено: ' + testRead));
+
+        // Проверяем основной ключ
+        const fp4 = await storageLoad('fp4');
+        dbg('fp4: ' + (fp4 ? fp4.length + ' симв' : 'ПУСТО'));
+        const fp3 = await storageLoad('fp3');
+        dbg('fp3 (старый): ' + (fp3 ? fp3.length + ' симв' : 'ПУСТО'));
+
+        dbg('projects в памяти: ' + projects.length);
+        dbg('--- КОНЕЦ ---');
     }
 
     document.getElementById('themeToggle').addEventListener('click', async function() {
