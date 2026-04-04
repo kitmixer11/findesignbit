@@ -991,27 +991,6 @@
         }));
     }
 
-    // ── Архивирование: оплаченные задачи старше 60 дней → отдельный ключ ──
-    // Это решает проблему лимита навсегда: основной ключ всегда компактный.
-    const ARCHIVE_DAYS = 60;
-
-    function splitForArchive(projects) {
-        const cutoff = Date.now() - ARCHIVE_DAYS * 24 * 60 * 60 * 1000;
-        const active = projects.map(proj => ({
-            ...proj,
-            tasks: proj.tasks.filter(t =>
-                !t.paid || !t.paidDate || new Date(t.paidDate).getTime() > cutoff
-            )
-        }));
-        const archive = projects.map(proj => ({
-            ...proj,
-            tasks: proj.tasks.filter(t =>
-                t.paid && t.paidDate && new Date(t.paidDate).getTime() <= cutoff
-            )
-        })).filter(p => p.tasks.length > 0);
-        return { active, archive };
-    }
-
     function storageSave(key, value) {
         return new Promise((resolve) => {
             if (!hasTgCloud) {
@@ -1041,67 +1020,25 @@
 
     // ── Save / Load ──
     async function saveProjects() {
-        const { active, archive } = splitForArchive(projects);
-
-        // Сохраняем активные (сжатые)
-        const compressed = compress(active);
-        console.log('[save] активные:', compressed.length, 'символов');
-        await storageSave('fp3', compressed);
-
-        // Сохраняем архив если есть (мёрджим с существующим)
-        if (archive.length > 0) {
-            const existingArchiveStr = await storageLoad('fp3_arch');
-            let existingArchive = [];
-            if (existingArchiveStr) {
-                try { existingArchive = decompress(existingArchiveStr); } catch(e) {}
-            }
-            // Мёрджим: добавляем только новые задачи которых ещё нет в архиве
-            for (const proj of archive) {
-                let archProj = existingArchive.find(p => p.id === proj.id);
-                if (!archProj) {
-                    archProj = { ...proj, tasks: [] };
-                    existingArchive.push(archProj);
-                }
-                const existingIds = new Set(archProj.tasks.map(t => t.id));
-                for (const t of proj.tasks) {
-                    if (!existingIds.has(t.id)) archProj.tasks.push(t);
-                }
-            }
-            const archCompressed = compress(existingArchive);
-            console.log('[save] архив:', archCompressed.length, 'символов');
-            await storageSave('fp3_arch', archCompressed);
-        }
-
+        const compressed = compress(projects);
+        console.log('[save] размер:', compressed.length, 'символов');
+        await storageSave('fp4', compressed);
         showSaveStatus(true);
     }
 
     async function loadData() {
         try {
-            let data = await storageLoad('fp3');
+            // Пробуем новый ключ, потом старые (миграция)
+            let data = await storageLoad('fp4');
+            if (!data) data = await storageLoad('fp3');
             if (!data) data = await storageLoad('financeProjects2');
             if (data) {
-                const active = decompress(data);
-
-                // Загружаем архив и мёрджим в проекты
-                const archStr = await storageLoad('fp3_arch');
-                if (archStr) {
-                    try {
-                        const archive = decompress(archStr);
-                        // Добавляем архивные задачи в соответствующие проекты
-                        for (const archProj of archive) {
-                            const proj = active.find(p => p.id === archProj.id);
-                            if (proj) {
-                                const existingIds = new Set(proj.tasks.map(t => t.id));
-                                for (const t of archProj.tasks) {
-                                    if (!existingIds.has(t.id)) proj.tasks.push(t);
-                                }
-                            }
-                        }
-                    } catch(e) { console.warn('archive load err:', e); }
-                }
-
-                projects = active;
+                projects = decompress(data);
                 console.log('[load] загружено проектов:', projects.length);
+                // Если загружено из старого ключа — сохраняем в новый
+                if (!(await storageLoad('fp4'))) {
+                    await saveProjects();
+                }
             } else {
                 projects = INITIAL_DATA;
                 await saveProjects();
